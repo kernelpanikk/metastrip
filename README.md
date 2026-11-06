@@ -59,3 +59,7 @@ This project is **vibecoded**: built in an afternoon by chatting with [Claude Co
 - `test_core.py`: self-check on real JPG, PNG and PDF files (`.venv/bin/python test_core.py`)
 
 Issues and pull requests welcome.
+
+## License
+
+[MIT](LICENSE)
