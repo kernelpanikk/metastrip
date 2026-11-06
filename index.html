@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MetaStrip</title>
+<style>
+  /* MetaStrip Clean Room design system tokens. No web fonts: a privacy tool shouldn't call Google; Inter if installed, else SF. */
+  :root {
+    --window:#F7F6F3; --surface:#FFFFFF; --sunken:#EFEDE8; --hairline:#E4E2DD; --border:#D9D6CF;
+    --text-1:#1C1C1E; --text-2:#48474A; --text-3:#5F5E5A;
+    --accent:#2563EB; --on-accent:#FFFFFF; --accent-text:#1D4ED8;
+    --strip:#E8590C; --strip-tint:#FDEBDD; --strip-text:#9A3412;
+    --edit-tint:#E3ECFD; --edit-text:#1E40AF; --edit-wash:#F8FAFF; --target-wash:#EEF3FE;
+    --protected:#15803D; --protected-tint:#DFF3E5; --protected-text:#14532D;
+    --shadow-segment:0 1px 2px rgba(0,0,0,.12);
+    --toast-bg:#1C1C1E; --toast-text:#F2F1EE; --toast-link:#A9C5FF; --toast-ok:#5FD38A; --toast-err:#FF8A4C;
+    --sans:Inter, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    --mono:"JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --window:#1B1B1D; --surface:#242426; --sunken:#161618; --hairline:#38383B; --border:#46464A;
+      --text-1:#F2F1EE; --text-2:#C9C8CC; --text-3:#A3A2A6;
+      --accent-text:#7AA7FF;
+      --strip:#FF8A4C; --strip-tint:#3A2318; --strip-text:#FFB088;
+      --edit-tint:#1A2440; --edit-text:#A9C5FF; --edit-wash:#1C2233; --target-wash:#1A2440;
+      --protected:#5FD38A; --protected-tint:#15301F; --protected-text:#8BE3AB;
+      --shadow-segment:0 1px 2px rgba(0,0,0,.4);
+      --toast-bg:#F2F1EE; --toast-text:#1C1C1E; --toast-link:#1D4ED8; --toast-ok:#15803D; --toast-err:#E8590C;
+    }
+  }
+  * { box-sizing:border-box; }
+  html, body { height:100%; }
+  body { margin:0; display:flex; flex-direction:column; background:var(--window); color:var(--text-1); font:13px/18px var(--sans); -webkit-font-smoothing:antialiased; }
+  button, input, select { font:inherit; color:inherit; }
+  :focus-visible { outline:3px solid rgba(37,99,235,.35); outline-offset:1px; }
+  .mono { font-family:var(--mono); font-size:12px; line-height:16px; }
+  .label { font-size:11px; line-height:14px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; }
+  .hidden { display:none !important; }
+  .grow { flex:1; }
+  svg.i { width:var(--s, 16px); height:var(--s, 16px); fill:none; stroke:currentColor; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; flex:none; }
+
+  /* Buttons: capsules, one blue primary per window */
+  .btn { height:36px; padding:0 20px; border-radius:999px; border:1px solid var(--border); background:var(--surface); font-weight:500; cursor:pointer; white-space:nowrap; }
+  .btn.primary { border:0; background:var(--accent); color:var(--on-accent); font-weight:600; }
+  .btn.plain { border:0; background:transparent; color:var(--accent-text); padding:0 12px; }
+  .btn:disabled { border-color:transparent; background:var(--sunken); color:var(--text-3); cursor:default; }
+
+  /* Drop zone */
+  #empty { flex:1; display:flex; padding:20px; }
+  .drop { flex:1; border-radius:20px; border:1.5px dashed var(--border); background:var(--surface); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; text-align:center; padding:16px; color:var(--text-3); }
+  .drop .title { font-size:15px; line-height:20px; font-weight:600; color:var(--text-1); }
+  .drop .target { display:none; }
+  body.over .drop { border:2px solid var(--accent); background:var(--target-wash); color:var(--edit-text); }
+  body.over .drop .idle { display:none; }
+  body.over .drop .target { display:contents; }
+  body.over .drop .title { color:var(--edit-text); }
+  body.over #inspector { box-shadow:inset 0 0 0 2px var(--accent); }
+
+  /* Inspector */
+  #inspector { flex:1; min-height:0; display:flex; flex-direction:column; }
+  .top { display:flex; align-items:center; gap:12px; padding:12px 20px; border-bottom:1px solid var(--hairline); flex-wrap:wrap; }
+  .top .file { display:flex; flex-direction:column; min-width:0; }
+  .top .name { font-size:15px; line-height:20px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .top .meta { font-size:11px; line-height:14px; color:var(--text-3); }
+  .chip { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:999px; background:var(--strip-tint); color:var(--strip-text); font-size:12px; font-weight:600; max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #filter { width:180px; height:28px; padding:0 12px; border-radius:999px; border:1px solid var(--border); background:var(--surface); font-size:12px; }
+  #groups { flex:1; overflow:auto; padding:20px; display:flex; flex-direction:column; gap:16px; }
+  .note { margin:0; color:var(--text-3); }
+
+  .card { background:var(--surface); border:1px solid var(--hairline); border-radius:16px; overflow:hidden; flex:none; }
+  .ghead { display:flex; align-items:center; gap:10px; height:36px; padding:0 16px; background:var(--sunken); color:var(--text-2); }
+  .ghead .count { color:var(--text-3); }
+  .ghead .sum { font-size:12px; font-weight:500; color:var(--strip-text); }
+  .ghead .sum.none { color:var(--text-3); }
+  .row { display:grid; grid-template-columns:minmax(120px, 180px) minmax(0, 1fr) 92px auto; gap:16px; align-items:center; min-height:44px; padding:4px 16px; border-top:1px solid var(--hairline); }
+  .row.edit { background:var(--edit-wash); }
+  .row .fname { font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .row .val { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .row.strip .val { color:var(--strip-text); text-decoration:line-through; text-decoration-color:var(--strip); }
+  .row .editing { display:flex; align-items:center; gap:10px; min-width:0; }
+  .row .old { color:var(--text-3); text-decoration:line-through; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:40%; }
+  .row .editing input { flex:1; min-width:80px; height:26px; padding:0 10px; border-radius:999px; border:1px solid var(--accent); background:var(--surface); font-family:var(--mono); font-size:12px; }
+  .tag { justify-self:start; display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600; white-space:nowrap; }
+  .tag.strip { background:var(--strip-tint); color:var(--strip-text); }
+  .tag.keep { background:var(--sunken); color:var(--text-2); }
+  .tag.edit { background:var(--edit-tint); color:var(--edit-text); }
+  .tag.protected { background:var(--protected-tint); color:var(--protected-text); }
+  .kept { justify-self:end; font-size:12px; color:var(--text-3); }
+  .seg { justify-self:end; display:inline-flex; gap:2px; padding:2px; border-radius:999px; background:var(--sunken); }
+  .seg button { height:26px; padding:0 10px; border:0; border-radius:999px; background:transparent; color:var(--text-2); font-size:12px; font-weight:500; cursor:pointer; }
+  .seg button[aria-pressed="true"] { background:var(--surface); font-weight:600; box-shadow:var(--shadow-segment); }
+  .seg button.strip[aria-pressed="true"] { color:var(--strip-text); }
+  .seg button.keep[aria-pressed="true"] { color:var(--text-1); }
+  .seg button.edit[aria-pressed="true"] { color:var(--edit-text); }
+  .seg button:disabled { opacity:.4; cursor:default; }
+
+  /* Save bar */
+  .savebar { display:flex; align-items:center; gap:12px; padding:12px 20px; border-top:1px solid var(--hairline); flex-wrap:wrap; }
+  .savebar .totals { font-weight:600; }
+  .savebar .dest { color:var(--text-3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  /* Toast */
+  #toast { position:fixed; left:50%; bottom:76px; transform:translateX(-50%); display:flex; align-items:center; gap:10px; max-width:calc(100% - 40px); padding:10px 14px; border-radius:16px; background:var(--toast-bg); color:var(--toast-text); box-shadow:0 12px 32px rgba(0,0,0,.22); }
+  #toast .ok { color:var(--toast-ok); } #toast .err { color:var(--toast-err); }
+  #toast a { color:var(--toast-link); white-space:nowrap; }
+  #toast button { border:0; background:transparent; color:inherit; opacity:.7; cursor:pointer; padding:4px; display:flex; }
+
+  /* Settings */
+  dialog { border:0; border-radius:20px; background:var(--window); color:var(--text-1); padding:20px; min-width:300px; box-shadow:0 0 0 .5px rgba(0,0,0,.18), 0 24px 60px rgba(0,0,0,.22); }
+  dialog::backdrop { background:rgb(0 0 0 / .25); }
+  dialog h2 { margin:0 0 16px; font-size:15px; line-height:20px; font-weight:600; }
+  dialog label { display:block; color:var(--text-3); margin-bottom:8px; }
+  dialog select { width:100%; height:32px; padding:0 12px; border-radius:999px; border:1px solid var(--border); background:var(--surface); margin-bottom:20px; }
+  dialog form { display:flex; justify-content:flex-end; margin:0; }
+</style>
+</head>
+<body>
+<main id="empty">
+  <div class="drop">
+    <span class="idle"><svg class="i" style="--s:32px" aria-hidden="true" viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/></svg></span>
+    <span class="target"><svg class="i" style="--s:32px" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5"/><path d="M5 20h14"/></svg></span>
+    <span class="idle"><span class="title" data-t="dropTitle"></span></span>
+    <span class="target"><span class="title" data-t="release"></span></span>
+    <span class="idle" data-t="dropFormats"></span>
+    <span class="target"><span data-t="nothingChanges"></span></span>
+    <span class="idle"><button class="btn choose" type="button" data-t="choose"></button></span>
+  </div>
+</main>
+
+<div id="inspector" class="hidden">
+  <header class="top">
+    <svg class="i" style="--s:22px; color:var(--text-2)" aria-hidden="true" viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/></svg>
+    <div class="file"><span class="name" id="fname"></span><span class="meta mono" id="fmeta"></span></div>
+    <span class="grow"></span>
+    <span id="chips" style="display:flex; gap:8px"></span>
+    <input id="filter" type="search" data-t-placeholder="filter">
+    <button class="btn plain choose" type="button" data-t="open"></button>
+  </header>
+  <div id="groups"></div>
+  <footer class="savebar">
+    <div style="display:flex; flex-direction:column; gap:2px; flex:1; min-width:0">
+      <span class="totals" id="totals"></span>
+      <span class="dest mono" id="dest"></span>
+    </div>
+    <button class="btn" id="overwrite" type="button" data-t="overwrite"></button>
+    <button class="btn primary" id="save" type="button"></button>
+  </footer>
+</div>
+
+<div id="toast" class="hidden" role="status"></div>
+
+<dialog id="settings">
+  <h2 data-t="settings"></h2>
+  <label for="lang" data-t="language"></label>
+  <select id="lang"></select>
+  <form method="dialog"><button class="btn primary" data-t="close"></button></form>
+</dialog>
+
+<script>
+const STRINGS = {
+  en: { name: 'English', dropTitle: 'Drop a file', dropFormats: 'Images, PDFs, documents, videos', choose: 'Choose…', open: 'Open…',
+    release: 'Release to inspect', nothingChanges: 'Nothing changes until you save', filter: 'Filter fields',
+    fields: '{n} fields', toStrip: '{n} to strip', nothingToStrip: 'Nothing to strip',
+    strip: 'Strip', keep: 'Keep', edit: 'Edit', edited: 'Edited', protected: 'Protected', keptColour: 'Kept to preserve the image',
+    actionFor: 'Action for {name}', newValue: 'New value for {name}',
+    totals: '{s} stripped · {e} edited · {p} protected', overwrite: 'Overwrite original…', saveCopy: 'Save clean copy',
+    confirmOverwrite: 'Overwrite the original file? This cannot be undone.',
+    savedCopy: 'Saved clean copy: {s} removed, {e} edited.', overwritten: 'Original overwritten: {s} removed, {e} edited.',
+    showInFinder: 'Show in Finder', dismiss: 'Dismiss', noMeta: 'No metadata found: this file is already clean.',
+    readError: 'Cannot read the file: ', error: 'Error: ', madeWith: 'Made with {v}', gps: 'Contains GPS',
+    settings: 'Settings', language: 'Interface language', close: 'Close' },
+  it: { name: 'Italiano', dropTitle: 'Trascina un file', dropFormats: 'Immagini, PDF, documenti, video', choose: 'Scegli…', open: 'Apri…',
+    release: 'Rilascia per analizzare', nothingChanges: 'Nulla cambia finché non salvi', filter: 'Filtra campi',
+    fields: '{n} campi', toStrip: '{n} da rimuovere', nothingToStrip: 'Niente da rimuovere',
+    strip: 'Rimuovi', keep: 'Mantieni', edit: 'Modifica', edited: 'Modificato', protected: 'Protetto', keptColour: "Mantenuto per preservare l'immagine",
+    actionFor: 'Azione per {name}', newValue: 'Nuovo valore per {name}',
+    totals: '{s} rimossi · {e} modificati · {p} protetti', overwrite: "Sovrascrivi l'originale…", saveCopy: 'Salva copia pulita',
+    confirmOverwrite: "Sovrascrivere il file originale? L'operazione non è reversibile.",
+    savedCopy: 'Copia pulita salvata: {s} rimossi, {e} modificati.', overwritten: 'Originale sovrascritto: {s} rimossi, {e} modificati.',
+    showInFinder: 'Mostra nel Finder', dismiss: 'Chiudi', noMeta: 'Nessun metadato trovato: il file è già pulito.',
+    readError: 'Impossibile leggere il file: ', error: 'Errore: ', madeWith: 'Creato con {v}', gps: 'Contiene GPS',
+    settings: 'Impostazioni', language: "Lingua dell'interfaccia", close: 'Chiudi' },
+  es: { name: 'Español', dropTitle: 'Arrastra un archivo', dropFormats: 'Imágenes, PDF, documentos, vídeos', choose: 'Elegir…', open: 'Abrir…',
+    release: 'Suelta para analizar', nothingChanges: 'Nada cambia hasta que guardes', filter: 'Filtrar campos',
+    fields: '{n} campos', toStrip: '{n} por eliminar', nothingToStrip: 'Nada que eliminar',
+    strip: 'Eliminar', keep: 'Conservar', edit: 'Editar', edited: 'Editado', protected: 'Protegido', keptColour: 'Se conserva para preservar la imagen',
+    actionFor: 'Acción para {name}', newValue: 'Nuevo valor para {name}',
+    totals: '{s} eliminados · {e} editados · {p} protegidos', overwrite: 'Sobrescribir el original…', saveCopy: 'Guardar copia limpia',
+    confirmOverwrite: '¿Sobrescribir el archivo original? No se puede deshacer.',
+    savedCopy: 'Copia limpia guardada: {s} eliminados, {e} editados.', overwritten: 'Original sobrescrito: {s} eliminados, {e} editados.',
+    showInFinder: 'Mostrar en Finder', dismiss: 'Cerrar', noMeta: 'No se encontraron metadatos: el archivo ya está limpio.',
+    readError: 'No se puede leer el archivo: ', error: 'Error: ', madeWith: 'Hecho con {v}', gps: 'Contiene GPS',
+    settings: 'Ajustes', language: 'Idioma de la interfaz', close: 'Cerrar' },
+  zh: { name: '中文', dropTitle: '拖入文件', dropFormats: '图片、PDF、文档、视频', choose: '选择…', open: '打开…',
+    release: '松开以检查', nothingChanges: '保存前不会有任何更改', filter: '筛选字段',
+    fields: '{n} 个字段', toStrip: '{n} 个待删除', nothingToStrip: '无需删除',
+    strip: '删除', keep: '保留', edit: '编辑', edited: '已编辑', protected: '受保护', keptColour: '为保持图像正确显示而保留',
+    actionFor: '{name} 的操作', newValue: '{name} 的新值',
+    totals: '删除 {s} · 编辑 {e} · 保护 {p}', overwrite: '覆盖原文件…', saveCopy: '保存干净副本',
+    confirmOverwrite: '覆盖原文件？此操作无法撤销。',
+    savedCopy: '已保存干净副本：删除 {s} 项，编辑 {e} 项。', overwritten: '已覆盖原文件：删除 {s} 项，编辑 {e} 项。',
+    showInFinder: '在访达中显示', dismiss: '关闭', noMeta: '未找到元数据：文件已是干净的。',
+    readError: '无法读取文件：', error: '错误：', madeWith: '由 {v} 创建', gps: '包含 GPS',
+    settings: '设置', language: '界面语言', close: '关闭' },
+  de: { name: 'Deutsch', dropTitle: 'Datei ablegen', dropFormats: 'Bilder, PDFs, Dokumente, Videos', choose: 'Auswählen…', open: 'Öffnen…',
+    release: 'Loslassen zum Prüfen', nothingChanges: 'Nichts ändert sich, bis du speicherst', filter: 'Felder filtern',
+    fields: '{n} Felder', toStrip: '{n} zu entfernen', nothingToStrip: 'Nichts zu entfernen',
+    strip: 'Entfernen', keep: 'Behalten', edit: 'Bearbeiten', edited: 'Bearbeitet', protected: 'Geschützt', keptColour: 'Bleibt, damit das Bild korrekt angezeigt wird',
+    actionFor: 'Aktion für {name}', newValue: 'Neuer Wert für {name}',
+    totals: '{s} entfernt · {e} bearbeitet · {p} geschützt', overwrite: 'Original überschreiben…', saveCopy: 'Saubere Kopie speichern',
+    confirmOverwrite: 'Originaldatei überschreiben? Das kann nicht rückgängig gemacht werden.',
+    savedCopy: 'Saubere Kopie gespeichert: {s} entfernt, {e} bearbeitet.', overwritten: 'Original überschrieben: {s} entfernt, {e} bearbeitet.',
+    showInFinder: 'Im Finder zeigen', dismiss: 'Schließen', noMeta: 'Keine Metadaten gefunden: Die Datei ist bereits sauber.',
+    readError: 'Datei kann nicht gelesen werden: ', error: 'Fehler: ', madeWith: 'Erstellt mit {v}', gps: 'Enthält GPS',
+    settings: 'Einstellungen', language: 'Sprache der Oberfläche', close: 'Schließen' },
+  fr: { name: 'Français', dropTitle: 'Dépose un fichier', dropFormats: 'Images, PDF, documents, vidéos', choose: 'Choisir…', open: 'Ouvrir…',
+    release: 'Relâche pour analyser', nothingChanges: "Rien ne change avant l'enregistrement", filter: 'Filtrer les champs',
+    fields: '{n} champs', toStrip: '{n} à supprimer', nothingToStrip: 'Rien à supprimer',
+    strip: 'Supprimer', keep: 'Garder', edit: 'Modifier', edited: 'Modifié', protected: 'Protégé', keptColour: "Conservé pour préserver l'image",
+    actionFor: 'Action pour {name}', newValue: 'Nouvelle valeur pour {name}',
+    totals: '{s} supprimés · {e} modifiés · {p} protégés', overwrite: "Écraser l'original…", saveCopy: 'Enregistrer une copie propre',
+    confirmOverwrite: 'Écraser le fichier original ? Cette action est irréversible.',
+    savedCopy: 'Copie propre enregistrée : {s} supprimés, {e} modifiés.', overwritten: 'Original écrasé : {s} supprimés, {e} modifiés.',
+    showInFinder: 'Afficher dans le Finder', dismiss: 'Fermer', noMeta: 'Aucune métadonnée trouvée : le fichier est déjà propre.',
+    readError: 'Impossible de lire le fichier : ', error: 'Erreur : ', madeWith: 'Créé avec {v}', gps: 'Contient du GPS',
+    settings: 'Réglages', language: "Langue de l'interface", close: 'Fermer' },
+};
+
+const ICONS = {
+  lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  pin: '<path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z"/><circle cx="12" cy="10" r="2"/>',
+  arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+  check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  x: '<path d="M6 6l12 12M18 6L6 18"/>',
+};
+const MADE_WITH = ['CreatorTool', 'Creator', 'Producer', 'Software'];
+
+const $ = id => document.getElementById(id);
+let lang = 'en', current = null, items = [], acts = {}, edits = {}, toastState = null;
+
+const t = (key, vars = {}) => (STRINGS[lang][key] ?? STRINGS.en[key]).replace(/\{(\w+)\}/g, (_, k) => vars[k]);
+
+function el(tag, props = {}, children = []) {
+  const n = Object.assign(document.createElement(tag), props);  // textContent only: metadata is untrusted
+  n.append(...children);
+  return n;
+}
+function icon(name, size = 16) {  // constant markup from ICONS, never metadata
+  const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('class', 'i'); s.setAttribute('aria-hidden', 'true');
+  s.style.setProperty('--s', size + 'px');
+  s.innerHTML = ICONS[name];
+  return s;
+}
+
+const isFixed = it => it.key.startsWith('xattr:') || it.value.startsWith('(Binary data');  // remove only, can't rewrite
+const isEdited = it => acts[it.key] === 'edit' && edits[it.key] !== it.value;
+
+function applyLang(code) {
+  lang = STRINGS[code] ? code : 'en';
+  document.documentElement.lang = lang;
+  $('lang').value = lang;
+  document.querySelectorAll('[data-t]').forEach(n => n.textContent = t(n.dataset.t));
+  document.querySelectorAll('[data-t-placeholder]').forEach(n => { n.placeholder = t(n.dataset.tPlaceholder); n.ariaLabel = n.placeholder; });
+  if (items.length || current) render();
+  if (toastState) toast(...toastState);
+}
+
+function render() {
+  const q = $('filter').value.trim().toLowerCase();
+  const groups = new Map();
+  for (const it of items) {
+    if (q && !(it.name + ' ' + it.value).toLowerCase().includes(q)) continue;
+    if (!groups.has(it.group)) groups.set(it.group, []);
+    groups.get(it.group).push(it);
+  }
+  const box = $('groups');
+  box.replaceChildren();
+  if (!items.some(it => !it.protected)) box.append(el('p', { className: 'note', textContent: t('noMeta') }));
+  for (const [g, rows] of groups) {
+    const n = rows.filter(r => !r.protected && acts[r.key] === 'strip').length;
+    box.append(el('section', { className: 'card' }, [
+      el('div', { className: 'ghead' }, [
+        el('span', { className: 'label', textContent: g }),
+        el('span', { className: 'count mono', textContent: t('fields', { n: rows.length }) }),
+        el('span', { className: 'grow' }),
+        el('span', { className: 'sum' + (n ? '' : ' none'), textContent: n ? t('toStrip', { n }) : t('nothingToStrip') }),
+      ]),
+      ...rows.map(row),
+    ]));
+  }
+  renderHeader();
+  updateBar();
+}
+
+function row(it) {
+  const act = it.protected ? 'protected' : acts[it.key];
+  let val;
+  if (act === 'edit') {
+    const inp = el('input', { type: 'text', value: edits[it.key], ariaLabel: t('newValue', { name: it.name }) });
+    inp.dataset.key = it.key;
+    inp.oninput = () => { edits[it.key] = inp.value; updateBar(); };
+    val = el('div', { className: 'editing' }, [el('span', { className: 'old mono', textContent: it.value, title: it.value }), icon('arrow', 14), inp]);
+  } else {
+    val = el('span', { className: 'val mono', textContent: it.value, title: it.value });
+  }
+  const tag = el('span', { className: 'tag ' + act }, act === 'protected' ? [icon('lock', 11), t('protected')] : [t(act === 'edit' ? 'edited' : act)]);
+  let ctl;
+  if (it.protected) {
+    ctl = el('span', { className: 'kept', textContent: t('keptColour') });
+  } else {
+    ctl = el('div', { className: 'seg' }, ['strip', 'keep', 'edit'].map(a => {
+      const b = el('button', { type: 'button', className: a, textContent: t(a), disabled: a === 'edit' && isFixed(it) });
+      b.setAttribute('aria-pressed', String(a === act));
+      b.onclick = () => {
+        acts[it.key] = a;
+        render();
+        if (a === 'edit') document.querySelector(`#groups input[data-key="${CSS.escape(it.key)}"]`)?.focus();
+      };
+      return b;
+    }));
+    ctl.setAttribute('role', 'group');
+    ctl.setAttribute('aria-label', t('actionFor', { name: it.name }));
+  }
+  return el('div', { className: 'row ' + act }, [el('span', { className: 'fname', textContent: it.name, title: it.key }), val, tag, ctl]);
+}
+
+function renderHeader() {
+  const chips = [];
+  if (items.some(it => /GPS/i.test(it.group + it.name))) chips.push(el('span', { className: 'chip' }, [icon('pin', 12), t('gps')]));
+  const maker = MADE_WITH.map(n => items.find(it => it.name === n && it.value)).find(Boolean);
+  if (maker) chips.push(el('span', { className: 'chip', title: maker.value, textContent: t('madeWith', { v: maker.value }) }));
+  $('chips').replaceChildren(...chips);
+}
+
+function counts() {
+  const loose = items.filter(it => !it.protected);
+  return { s: loose.filter(it => acts[it.key] === 'strip').length, e: loose.filter(isEdited).length, p: items.length - loose.length };
+}
+
+function updateBar() {
+  const c = counts();
+  $('totals').textContent = t('totals', c);
+  const name = current.split('/').pop(), dot = name.lastIndexOf('.');
+  $('dest').textContent = '→ ' + (dot > 0 ? name.slice(0, dot) + '_clean' + name.slice(dot) : name + '_clean');
+  const idle = c.s + c.e === 0;
+  $('save').disabled = $('overwrite').disabled = idle;
+  $('save').textContent = idle ? t('nothingToStrip') : t('saveCopy');
+}
+
+function toast(key, vars, ok, path) {
+  toastState = key ? [key, vars, ok, path] : null;
+  const box = $('toast');
+  box.classList.toggle('hidden', !key);
+  if (!key) return;
+  const parts = [el('span', { className: ok ? 'ok' : 'err' }, [icon(ok ? 'check' : 'x')]), el('span', { textContent: t(key, vars) + (vars.detail || '') })];
+  if (path) {
+    const a = el('a', { href: '#', textContent: t('showInFinder') });
+    a.onclick = e => { e.preventDefault(); pywebview.api.reveal(path); };
+    parts.push(a);
+  }
+  const close = el('button', { type: 'button', ariaLabel: t('dismiss') }, [icon('x', 14)]);
+  close.onclick = () => toast(null);
+  box.replaceChildren(...parts, close);
+}
+
+async function load(path, defaultAct = 'strip') {
+  try {
+    const [list, info] = await Promise.all([pywebview.api.inspect(path), pywebview.api.info(path)]);
+    current = path;
+    items = list;
+    acts = {}; edits = {};
+    for (const it of list) { acts[it.key] = defaultAct; edits[it.key] = it.value; }
+    $('fname').textContent = path.split('/').pop();
+    $('fmeta').textContent = [info.type, info.size, info.folder].join(' · ');
+    $('filter').value = '';
+    $('empty').classList.add('hidden');
+    $('inspector').classList.remove('hidden');
+    render();
+  } catch (e) { toast('readError', { detail: e.message }, false); }
+}
+
+async function save(overwrite) {
+  if (overwrite && !confirm(t('confirmOverwrite'))) return;
+  const loose = items.filter(it => !it.protected);
+  const keys = loose.filter(it => acts[it.key] === 'strip').map(it => it.key);
+  const changed = Object.fromEntries(loose.filter(isEdited).map(it => [it.key, edits[it.key]]));
+  const c = counts();
+  $('save').disabled = $('overwrite').disabled = true;
+  try {
+    const res = await pywebview.api.strip(current, keys, overwrite, changed);
+    await load(res.output, 'keep');  // show the saved file as it is now, nothing pending
+    toast(overwrite ? 'overwritten' : 'savedCopy', c, true, res.output);
+  } catch (e) { toast('error', { detail: e.message }, false); updateBar(); }
+}
+
+document.querySelectorAll('.choose').forEach(b => b.onclick = async () => { const p = await pywebview.api.choose(); if (p) { toast(null); load(p); } });
+$('filter').oninput = render;
+$('save').onclick = () => save(false);
+$('overwrite').onclick = () => save(true);
+
+for (const [code, s] of Object.entries(STRINGS)) $('lang').append(el('option', { value: code, textContent: s.name }));
+$('lang').onchange = () => { applyLang($('lang').value); pywebview.api.save_settings({ lang }); };
+document.addEventListener('keydown', e => {
+  if (e.metaKey && e.key === ',') { e.preventDefault(); $('settings').showModal(); }
+});
+
+let dragDepth = 0;  // dragenter/leave fire for every child; count to know when the pointer really left
+document.addEventListener('dragenter', () => { dragDepth++; document.body.classList.add('over'); });
+document.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; document.body.classList.remove('over'); } });
+document.addEventListener('drop', () => { dragDepth = 0; document.body.classList.remove('over'); toast(null); });
+
+applyLang('en');
+async function init() { applyLang((await pywebview.api.get_settings()).lang); }
+if (window.pywebview?.api?.get_settings) init(); else window.addEventListener('pywebviewready', init);
+</script>
+</body>
+</html>
